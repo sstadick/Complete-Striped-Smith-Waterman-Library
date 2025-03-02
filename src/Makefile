@@ -3,7 +3,7 @@ CXX = g++
 CFLAGS += -Wall -pipe -O2
 #CFLAGS += -Wall -pipe -g -fsanitize=address	# for debug
 CXXFLAGS := $(CFLAGS)
-LOBJS = ssw.o
+LOBJS = ssw.o ss_helpers.o
 LCPPOBJS = ssw_cpp.o
 PROG = ssw_test
 LIB = libssw.so
@@ -21,7 +21,7 @@ core: $(PROG)
 java: java_home $(JAVA_JAR) $(JAVA_LIB)
 all: default java
 
-$(LIB): ssw.c ssw.h
+$(LIB): ssw.c ssw.h ss_helpers.c ss_helpers.h
 	$(CC) $(CFLAGS) -fPIC -shared -rdynamic -o $@ $<
 
 $(PROG): main.c kseq.h
@@ -53,6 +53,9 @@ ifndef JAVA_HOME
 	@$(ECHO) "ERROR: Your JAVA_HOME environment variable is not set."
 	exit 1
 endif
+
+ss_helpers.o: ss_helpers.c ss_helpers.h
+	$(CC) -c -o $@ $< $(CFLAGS)
 
 ssw.o: ssw.c ssw.h
 	$(CC) -c -o $@ $< $(CFLAGS)
