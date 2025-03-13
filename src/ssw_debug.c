@@ -262,9 +262,8 @@ static alignment_end *sw_sse2_byte(
   printf("refLen: %i\n", refLen);
   printf("queryLen: %i\n", readLen);
   printf("segLen: %i\n", segLen);
-  printf("bias: %i\n", bias);
   for (int r = 0; r < refLen; r++) {
-    printf("%c", idx_to_aa(ref[r]));
+    printf("%c", alpha_idx_to_nt(ref[r]));
   }
   printf("\n");
   /* outer loop to process the reference sequence */
@@ -299,7 +298,7 @@ static alignment_end *sw_sse2_byte(
     pvHLoad = pvHStore;
     pvHStore = pv;
 
-    printf("Outer loop over reference: %i - %c\n", i, idx_to_aa(ref[i]));
+    printf("Outer loop over reference: %i - %c\n", i, alpha_idx_to_nt(ref[i]));
     printf("vH State:\n");
     print128_num_byte(vH);
     printf("\n");
@@ -522,9 +521,9 @@ static alignment_end *sw_sse2_byte(
     }
   }
 
-  printf("BEST: score %i, ref: %i, read: %i\n", bests[0].score, bests[0].ref,
+  printf("score %i, ref: %i, read: %i\n", bests[0].score, bests[0].ref,
          bests[0].read);
-  printf("SECOND: score %i, ref: %i, read: %i\n", bests[1].score, bests[1].ref,
+  printf("score %i, ref: %i, read: %i\n", bests[1].score, bests[1].ref,
          bests[1].read);
 
   free(maxColumn);

@@ -67,7 +67,6 @@
  */
 
 #include "ssw.h"
-#include "ss_helpers.h"
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -169,11 +168,10 @@ qP_byte(const int8_t *read_num, const int8_t *mat, const int32_t readLen,
         uint8_t bias) {
 
   int32_t segLen =
-      (readLen + 15) /
-      16; /* Split the 128 bit register into 16 pieces.
-                                 Each piece is 8 bit. Split the read into 16
-             segments. Calculat 16 segments in parallel.
-                               */
+      (readLen + 15) / 16; /* Split the 128 bit register into 16 pieces.
+                      Each piece is 8 bit. Split the read into 16 segments.
+                      Calculat 16 segments in parallel.
+                    */
   __m128i *vProfile = (__m128i *)malloc(n * segLen * sizeof(__m128i));
   int8_t *t = (int8_t *)vProfile;
   int32_t nt, i, j, segNum;
@@ -198,19 +196,19 @@ qP_byte(const int8_t *read_num, const int8_t *mat, const int32_t readLen,
    best alignment, etc. Gap begin and gap extension are different. wight_match >
    0, all other weights < 0. The returned positions are 0-based.
  */
-static alignment_end *sw_sse2_byte(
-    const int8_t *ref,
-    int8_t ref_dir, // 0: forward ref; 1: reverse ref
-    int32_t refLen, int32_t readLen,
-    const uint8_t weight_gapO, /* will be used as - */
-    const uint8_t weight_gapE, /* will be used as - */
-    const __m128i *vProfile,
-    uint8_t terminate, /* the best alignment score: used to terminate
-                                          the matrix calculation when
-                          locating the alignment beginning point. If this
-                          score is set to 0, it will not be used */
-    uint8_t bias,      /* Shift 0 point to a positive value. */
-    int32_t maskLen) {
+static alignment_end *
+sw_sse2_byte(const int8_t *ref,
+             int8_t ref_dir, // 0: forward ref; 1: reverse ref
+             int32_t refLen, int32_t readLen,
+             const uint8_t weight_gapO, /* will be used as - */
+             const uint8_t weight_gapE, /* will be used as - */
+             const __m128i *vProfile,
+             uint8_t terminate, /* the best alignment score: used to terminate
+                            the matrix calculation when locating the
+                            alignment beginning point. If this score
+                            is set to 0, it will not be used */
+             uint8_t bias,      /* Shift 0 point to a positive value. */
+             int32_t maskLen) {
 
 // Put the largest number of the 16 numbers in vm into m.
 #define max16(m, vm)                                                           \
@@ -258,15 +256,6 @@ static alignment_end *sw_sse2_byte(
   __m128i vTemp;
   int32_t edge, begin = 0, end = refLen, step = 1;
 
-  printf("Starting sw_sse2_byte, after initializations.\n");
-  printf("refLen: %i\n", refLen);
-  printf("queryLen: %i\n", readLen);
-  printf("segLen: %i\n", segLen);
-  printf("bias: %i\n", bias);
-  for (int r = 0; r < refLen; r++) {
-    printf("%c", idx_to_aa(ref[r]));
-  }
-  printf("\n");
   /* outer loop to process the reference sequence */
   if (ref_dir == 1) {
     begin = refLen - 1;
@@ -275,22 +264,14 @@ static alignment_end *sw_sse2_byte(
   }
   for (i = begin; LIKELY(i != end); i += step) {
     int32_t cmp;
-    __m128i e,
-        vF = vZero,
-        vMaxColumn =
-            vZero; /* Initialize F value to 0.
-                   Any errors to vH values will be corrected in the Lazy_F loop.
-                 */
+    __m128i e, vF = vZero,
+               vMaxColumn = vZero; /* Initialize F value to 0.
+               Any errors to vH values will be corrected in the Lazy_F loop.
+             */
 
     __m128i vH = pvHStore[segLen - 1];
-    printf("vH State pre shift:\n");
-    print128_num_byte(vH);
-    printf("\n");
     vH = _mm_slli_si128(vH,
                         1); /* Shift the 128-bit value in vH left by 1 byte. */
-    printf("vH State post shift:\n");
-    print128_num_byte(vH);
-    printf("\n");
     const __m128i *vP =
         vProfile + ref[i] * segLen; /* Right part of the vProfile */
 
@@ -299,70 +280,16 @@ static alignment_end *sw_sse2_byte(
     pvHLoad = pvHStore;
     pvHStore = pv;
 
-    printf("Outer loop over reference: %i - %c\n", i, idx_to_aa(ref[i]));
-    printf("vH State:\n");
-    print128_num_byte(vH);
-    printf("\n");
-    printf("vP State (first segment only):\n");
-    print128_num_byte(vP[0]);
-    printf("\n");
-    printf("pvHLoad State:\n");
-    for (int t = 0; t < segLen; t++) {
-      print128_num_byte(pvHLoad[t]);
-    }
-    printf("\n");
-    printf("pvHStore State:\n");
-    for (int t = 0; t < segLen; t++) {
-      print128_num_byte(pvHStore[t]);
-    }
-    printf("\n");
-
-    printf("pvE State:\n");
-    for (int t = 0; t < segLen; t++) {
-      print128_num_byte(pvE[t]);
-    }
-    printf("\n");
-
-    printf("pvHMax State:\n");
-    for (int t = 0; t < segLen; t++) {
-      print128_num_byte(pvHmax[t]);
-    }
-    printf("\n");
-
-    printf("maxColumn state:\n");
-    for (int t = 0; t < refLen; t++) {
-      printf("%-3i ", maxColumn[t]);
-    }
-    printf("\n");
-    printf("end_read_column state:\n");
-    for (int t = 0; t < refLen; t++) {
-      printf("%-3i ", end_read_column[t]);
-    }
-    printf("\n");
-
     /* inner loop to process the query sequence */
     for (j = 0; LIKELY(j < segLen); ++j) {
-      printf("\tInner loop for query sequence, checking segment: %i\n", j);
-      printf("\tSegment J's query profile:\n\t");
-      print128_num_byte(_mm_loadu_si128(vP + j));
-      printf("\n");
       vH = _mm_adds_epu8(vH, _mm_load_si128(vP + j));
       vH = _mm_subs_epu8(vH, vBias); /* vH will be always > 0 */
-      printf("\tState of vH after adding profile and subtracting bias:\n\t");
-      print128_num_byte(vH);
-      printf("\n");
 
       /* Get max from vH, vE and vF. */
       e = _mm_load_si128(pvE + j);
       vH = _mm_max_epu8(vH, e);
       vH = _mm_max_epu8(vH, vF);
       vMaxColumn = _mm_max_epu8(vMaxColumn, vH);
-      printf("\tvMaxColumn State:\n\t");
-      print128_num_byte(vMaxColumn);
-      printf("\n");
-      printf("\tvH State after getting max:\n\t");
-      print128_num_byte(vH);
-      printf("\n");
 
       /* Save vH values. */
       _mm_store_si128(pvHStore + j, vH);
@@ -372,65 +299,32 @@ static alignment_end *sw_sse2_byte(
       e = _mm_subs_epu8(e, vGapE);
       e = _mm_max_epu8(e, vH);
       _mm_store_si128(pvE + j, e);
-      printf("\te State after update:\n\t");
-      print128_num_byte(e);
-      printf("\n");
 
       /* Update vF value. */
       vF = _mm_subs_epu8(vF, vGapE);
       vF = _mm_max_epu8(vF, vH);
-      printf("\tvF State after after update:\n\t");
-      print128_num_byte(vF);
-      printf("\n");
 
       /* Load the next vH. */
       vH = _mm_load_si128(pvHLoad + j);
-      printf("\tnext vH: \n\t");
-      print128_num_byte(vH);
-      printf("\n");
     }
 
     /* Lazy_F loop: has been revised to disallow adjecent insertion and then
      * deletion, so don't update E(i, j), learn from SWPS3 */
-    printf("Starting LazyF\n");
     for (k = 0; LIKELY(k < 16); ++k) {
-      printf("\tLeft Shift vF\n");
       vF = _mm_slli_si128(vF, 1);
-      printf("\tvF: \n\t");
-      print128_num_byte(vF);
-      printf("\n");
-
-      printf("\tWalking segments\n");
       for (j = 0; LIKELY(j < segLen); ++j) {
         vH = _mm_load_si128(pvHStore + j);
         vH = _mm_max_epu8(vH, vF);
-        printf("\t\tvH after left shift and max with vF: \n\t\t");
-        print128_num_byte(vH);
-        printf("\n");
-
         vMaxColumn = _mm_max_epu8(vMaxColumn, vH); // newly added line
-        printf("\t\tvMaxColumn State:\n\t\t");
-        print128_num_byte(vMaxColumn);
-        printf("\n");
-
         _mm_store_si128(pvHStore + j, vH);
         vH = _mm_subs_epu8(vH, vGapO);
         vF = _mm_subs_epu8(vF, vGapE);
-        printf("\t\tnew vH: \n\t\t");
-        print128_num_byte(vH);
-        printf("\n");
-        printf("\t\tnew vF: \n\t\t");
-        print128_num_byte(vF);
-        printf("\n");
         vTemp = _mm_subs_epu8(vF, vH);
         vTemp = _mm_cmpeq_epi8(vTemp, vZero);
-        if (UNLIKELY(_mm_movemask_epi8(vTemp) == 0xffff)) {
-          printf("\t\tCan terminate early\n");
+        if (UNLIKELY(_mm_movemask_epi8(vTemp) == 0xffff))
           goto end;
-        }
       }
     }
-    printf("Done with main loops\n");
 
   end:
     vMaxScore = _mm_max_epu8(vMaxScore, vMaxColumn);
@@ -444,10 +338,8 @@ static alignment_end *sw_sse2_byte(
 
       if (LIKELY(temp > max)) {
         max = temp;
-        if (max + bias >= 255) {
-          printf("OVERFLOW\n");
+        if (max + bias >= 255)
           break; // overflow
-        }
         end_ref = i;
 
         /* Store the column with the highest alignment score in order to trace
@@ -474,23 +366,6 @@ static alignment_end *sw_sse2_byte(
         end_read = temp;
     }
   }
-
-  printf("pvHMax State:\n");
-  for (int t = 0; t < segLen; t++) {
-    print128_num_byte(pvHmax[t]);
-  }
-  printf("\n");
-
-  printf("maxColumn state:\n");
-  for (int t = 0; t < refLen; t++) {
-    printf("%-3i ", maxColumn[t]);
-  }
-  printf("\n");
-  printf("end_read_column state:\n");
-  for (int t = 0; t < refLen; t++) {
-    printf("%-3i ", end_read_column[t]);
-  }
-  printf("\n");
 
   free(pvHmax);
   free(pvE);
@@ -521,11 +396,6 @@ static alignment_end *sw_sse2_byte(
       bests[1].ref = i;
     }
   }
-
-  printf("BEST: score %i, ref: %i, read: %i\n", bests[0].score, bests[0].ref,
-         bests[0].read);
-  printf("SECOND: score %i, ref: %i, read: %i\n", bests[1].score, bests[1].ref,
-         bests[1].read);
 
   free(maxColumn);
   free(end_read_column);
@@ -612,10 +482,11 @@ sw_sse2_word(const int8_t *ref,
   }
   for (i = begin; LIKELY(i != end); i += step) {
     int32_t cmp;
-    __m128i e, vF = vZero; /* Initialize F value to 0.
-                                               Any errors to vH values will be
-                              corrected in the Lazy_F loop.
-                                             */
+    __m128i e,
+        vF =
+            vZero; /* Initialize F value to 0.
+                   Any errors to vH values will be corrected in the Lazy_F loop.
+                 */
     __m128i vH = pvHStore[segLen - 1];
     vH = _mm_slli_si128(vH,
                         2); /* Shift the 128-bit value in vH left by 2 byte. */
@@ -1082,8 +953,8 @@ s_align *ssw_align(
   if (UNLIKELY(
           r->score1 >
           bests_reverse[0].score)) { // banded_sw result will miss a small part
-    fprintf(stderr, "Warning: The alignment path of one pair of sequences may "
-                    "miss a small part. [ssw.c ssw_align]\n");
+    //  fprintf(stderr, "Warning: The alignment path of one pair of sequences
+    //  may miss a small part. [ssw.c ssw_align]\n");
     r->flag = 2;
   }
   free(bests_reverse);
@@ -1092,7 +963,7 @@ s_align *ssw_align(
       ((4 & flag) != 0 && (r->ref_end1 - r->ref_begin1 > filterd ||
                            r->read_end1 - r->read_begin1 > filterd)))
     goto end;
-
+  fprintf(stderr, "Should not see this\n");
   // Generate cigar.
   refLen = r->ref_end1 - r->ref_begin1 + 1;
   readLen = r->read_end1 - r->read_begin1 + 1;
@@ -1103,9 +974,9 @@ s_align *ssw_align(
 
   /*int32_t i, length;
       char op;
-          for (i = 0; i < path->length; ++i) {
-                  op = cigar_int_to_op(path->seq[i]);
-                  length = cigar_int_to_len(path->seq[i]);
+      for (i = 0; i < path->length; ++i) {
+          op = cigar_int_to_op(path->seq[i]);
+          length = cigar_int_to_len(path->seq[i]);
           fprintf(stderr, "%d%c", length, op);
       }
       fprintf(stderr, "\n");*/
@@ -1160,7 +1031,7 @@ uint32_t *store_previous_m(
    beginning and ending of the original cigar.
     @return:
      The number of mismatches.
-         The cigar and cigarLen are modified.
+     The cigar and cigarLen are modified.
 */
 int32_t mark_mismatch(int32_t ref_begin1, int32_t read_begin1,
                       int32_t read_end1, const int8_t *ref, const int8_t *read,

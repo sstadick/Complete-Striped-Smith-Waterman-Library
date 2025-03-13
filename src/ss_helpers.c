@@ -8,7 +8,14 @@
 #include <string.h>
 
 /* This table is used to transform numbers to nucleotide letters */
-static const int8_t num_to_nt_table[5] = {'A', 'C', 'T', 'G', 'N'};
+static const int8_t num_to_nt_table[5] = {'A', 'C', 'G', 'T', 'N'};
+
+static const int8_t num_to_aa_table[24] = {
+    'A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K',
+    'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V', 'B', 'Z', 'X', '*'};
+
+char alpha_idx_to_nt(int8_t idx) { return num_to_nt_table[idx]; }
+char idx_to_aa(int8_t idx) { return num_to_aa_table[idx]; }
 
 void print128_num_word(__m128i var) {
   int16_t val[8];
@@ -43,25 +50,29 @@ void print_profile(s_profile *prof) {
   printf("If the query doesn't use a full segment (SIMD width), then bias "
          "fills in at the end.\n");
   printf("Byte Profile:\n");
-  for (int nt = 0; nt < prof->n; nt++) {
-    printf("%c: ", num_to_nt_table[nt]);
-    for (int i = 0; i < segLen; i++) {
-      printf("[");
-      print128_num_byte(prof->profile_byte[nt * segLen + i]);
-      printf("], ");
+  if (prof->profile_byte != NULL) {
+    for (int nt = 0; nt < prof->n; nt++) {
+      printf("%c: ", alpha_idx_to_nt(nt));
+      for (int i = 0; i < segLen; i++) {
+        printf("[");
+        print128_num_byte(prof->profile_byte[nt * segLen + i]);
+        printf("], ");
+      }
+      printf("\n");
     }
-    printf("\n");
   }
 
   printf("Word Profile:\n");
-  int32_t wordSegLen = (prof->readLen + 7) / 8;
-  for (int nt = 0; nt < prof->n; nt++) {
-    printf("%c: ", num_to_nt_table[nt]);
-    for (int i = 0; i < wordSegLen; i++) {
-      printf("[");
-      print128_num_word(prof->profile_word[nt * wordSegLen + i]);
-      printf("], ");
+  if (prof->profile_word != NULL) {
+    int32_t wordSegLen = (prof->readLen + 7) / 8;
+    for (int nt = 0; nt < prof->n; nt++) {
+      printf("%c: ", num_to_nt_table[nt]);
+      for (int i = 0; i < wordSegLen; i++) {
+        printf("[");
+        print128_num_word(prof->profile_word[nt * wordSegLen + i]);
+        printf("], ");
+      }
+      printf("\n");
     }
-    printf("\n");
   }
 }
